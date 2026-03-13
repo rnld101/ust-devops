@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myfirstpod
+  labels:
+    app: ustimage
+spec:
+  containers:
+    - name: myfirst
+      image: rajcosivadevops/ustimage:latest
+      ports:
+        - containerPort: 80
