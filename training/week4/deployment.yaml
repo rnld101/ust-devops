@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mydeploy
+
+spec:
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: mypod
+
+  template:
+    metadata:
+      labels:
+        app: mypod
+
+    spec:
+      containers:
+      - name: mycontainer
+        image: rnld101/nginx-static:green
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
