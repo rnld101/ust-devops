@@ -1,0 +1,7 @@
+- Run k8_setup.sh script
+- For master node:
+	- Run kubeadm init
+- For worker node:
+	- Run kubeadm join
+- After all master is initialized and worker nodes connected
+	- Install Calico from official site
