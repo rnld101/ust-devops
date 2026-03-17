@@ -1,0 +1,53 @@
+# DEPLOYMENT
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: backend-deploy
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-pod
+  template:
+    metadata:
+      labels:
+        app: backend-pod
+    spec:
+      containers:
+      - name: backend-container
+        image: rnld101/3tier-nodejs:backend
+        imagePullPolicy: Always
+        
+        # Try to use ConfigMap and Secrets for env variables ! 
+        env:
+        - name: DB_HOST
+          value: "mysql"
+        - name: DB_USER
+          value: "admin"
+        - name: DB_PASSWORD
+          value: "admin123"
+        - name: DB_NAME
+          value: "schooldb"
+        - name: REDIS_URL
+          value: "redis://redis-svc:6379"
+        ports:
+        - containerPort: 3000
+
+---
+
+# SERVICE
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: backend-svc
+  # Name must be exactly "backend-svc" to match what the Nginx proxy expects in frontend config
+
+spec:
+  selector:
+    app: backend-pod
+  ports:
+  - port: 3000
+  # The default type is "ClusterIP" and protocol is "TCP" and target port == port !

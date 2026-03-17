@@ -1,0 +1,79 @@
+# DEPLOYMENT
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: redis-deploy
+
+spec:
+  selector:
+    matchLabels:
+      app: redis-pod
+  
+  template:
+    metadata:
+      labels:
+        app: redis-pod
+
+    spec:
+      containers:
+      - name: redis-container
+        image: redis:alpine
+        command: ["redis-server", "--appendonly", "yes"]
+
+        ports:
+        - containerPort: 6379
+
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-pvc
+
+---
+
+# SERVICE
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-svc
+spec:
+  selector:
+    app: redis-pod
+  ports:
+  - port: 6379
+
+---
+
+# PV
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  hostPath:
+    path: /mnt/data/redis
+
+---
+
+# PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 1Gi
+

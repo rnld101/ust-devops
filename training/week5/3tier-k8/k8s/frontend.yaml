@@ -1,0 +1,43 @@
+# DEPLOYMENT
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: frontend-deploy
+
+spec:
+  selector:
+    matchLabels:
+      app: frontend-pod
+
+  template:
+    metadata:
+      labels:
+        app: frontend-pod
+
+    spec:
+      containers:
+      - name: frontend-container
+        image: rnld101/3tier-nodejs:frontend
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+
+---
+
+# SERVICE
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: frontend-svc
+
+spec:
+  type: NodePort
+  selector:
+    app: frontend-pod
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30101
+
