@@ -1,4 +1,4 @@
-# DNS & AWS Route 53 — Complete Notes 🌐
+# DNS & AWS Route 53 🌐
 
 ---
 
