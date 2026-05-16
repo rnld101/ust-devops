@@ -485,7 +485,7 @@ Use Case:
 
 ---
 
-### Latency Routing ⚡
+## Latency Routing ⚡
 
 Routes users to the AWS region with the **lowest network latency**, not necessarily the geographically closest region.
 
