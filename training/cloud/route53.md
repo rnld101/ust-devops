@@ -20,33 +20,8 @@
   - [SOA Record](#soa-record)
   - [TTL (Time To Live)](#ttl-time-to-live)
 - [DNS Record Types](#dns-record-types)
-  - [A Record](#a-record)
-  - [AAAA Record](#aaaa-record)
-  - [CNAME Record](#cname-record)
-  - [MX Record](#mx-record)
-  - [TXT Record](#txt-record)
-  - [NS Record](#ns-record)
-  - [PTR Record](#ptr-record)
-  - [SRV Record](#srv-record)
-  - [Alias Records](#alias-records)
-  - [CNAME vs Alias](#cname-vs-alias)
 - [Route 53 Routing Policies](#route-53-routing-policies)
-  - [Simple Routing](#simple-routing)
-  - [Weighted Routing](#weighted-routing)
-  - [Latency Routing](#latency-routing)
-  - [Geolocation Routing](#geolocation-routing)
-  - [Geoproximity Routing](#geoproximity-routing)
-  - [Multi-Value Routing](#multi-value-routing)
-  - [IP-Based Routing](#ip-based-routing)
-  - [Failover Routing](#failover-routing)
-- [Route 53 Health Checks](#route-53-health-checks)
 - [Tasks](#tasks)
-  - [Task 1 — Host a Website Using Simple Routing](#task-1--host-a-website-using-simple-routing)
-  - [Weighted Routing Setup](#weighted-routing-setup)
-  - [Latency Routing Setup](#latency-routing-setup)
-  - [Failover Routing Setup](#failover-routing-setup)
-  - [Geolocation Routing Setup](#geolocation-routing-setup)
-  - [Multi-Value Routing Setup](#multi-value-routing-setup)
 - [Key Takeaways](#key-takeaways)
 
 ---
@@ -88,7 +63,7 @@ DNS uses a hierarchical naming structure:
 
 ---
 
-## How DNS Resolution Works 🔄
+## How DNS Resolution Works
 
 When you enter `www.example.com` in a browser:
 
@@ -127,7 +102,7 @@ When you enter `www.example.com` in a browser:
 
 ---
 
-## DNS Service Providers 🌐
+## DNS Service Providers
 
 | Provider | Type | Features |
 |---|---|---|
@@ -202,7 +177,7 @@ AWS named the service after the standard DNS port.
 
 ## Route 53 Core Components
 
-### Hosted Zones 📂
+### Hosted Zones
 
 A **Hosted Zone** is a container for DNS records of a domain.
 
@@ -214,17 +189,17 @@ Route 53 automatically creates:
 - **NS Record** → Route 53 name servers
 - **SOA Record** → Administrative metadata
 
-#### Public Hosted Zone 🌍
+#### Public Hosted Zone
 Used for routing traffic from the **public internet**.
 
-#### Private Hosted Zone 🔒
+#### Private Hosted Zone
 Used for routing traffic **inside VPCs only**.
 
 > Public zones work on the internet. Private zones work only inside AWS VPCs.
 
 ---
 
-### Name Servers (NS) 🌐
+### Name Servers (NS)
 
 Name Servers host DNS records and answer DNS queries. AWS provides **4 name servers** for redundancy.
 
@@ -239,7 +214,7 @@ ns-234.awsdns-56.co.uk
 
 ---
 
-### DNS Delegation 🔀
+### DNS Delegation
 
 To use Route 53 DNS:
 
@@ -262,7 +237,7 @@ Now DNS queries are handled by Route 53.
 
 ---
 
-### SOA Record 🧾
+### SOA Record
 
 **SOA = Start of Authority**
 
@@ -278,7 +253,7 @@ Contains administrative details about the hosted zone:
 
 ---
 
-### TTL (Time To Live) ⏳
+### TTL (Time To Live)
 
 TTL defines how long DNS records stay cached.
 
@@ -375,7 +350,7 @@ Defines authoritative name servers. Automatically created in Route 53.
 
 ---
 
-### PTR Record 🔁
+### PTR Record
 
 Used for **reverse DNS lookup**, allowing systems to map an IP address back to its associated domain name. Commonly used in email verification, logging, and network troubleshooting.
 
@@ -397,7 +372,7 @@ Commonly used in:
 
 ---
 
-### Alias Records ⭐
+### Alias Records
 
 Alias records map domains directly to AWS resources such as:
 - Load Balancers
@@ -433,7 +408,7 @@ example.com → ALB.amazonaws.com
 
 ---
 
-## Route 53 Routing Policies 🌐
+## Route 53 Routing Policies
 
 > Routing Policies define how Route 53 responds to DNS queries.
 > DNS itself does **not route traffic** like a Load Balancer — it only decides which IP or resource to return.
