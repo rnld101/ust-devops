@@ -1,736 +1,1049 @@
-# 🌐 DNS & Amazon Route 53 — Complete Study Guide
+# Introduction to DNS 🌐
 
-> **How to use this guide:** Start from Part 1 and read sequentially. Each section builds on the previous one. By the end, you'll have a complete mental model from buying a domain all the way to routing traffic across AWS infrastructure.
+## What is DNS?
+DNS (Domain Name System) translates human-friendly domain names into machine-readable IP addresses.
 
----
+Example:
+- `www.google.com` → `172.217.18.36`
 
-## Table of Contents
-
-1. [The Big Picture](#the-big-picture)
-2. [How DNS Actually Works](#how-dns-actually-works)
-3. [Core DNS Terminology](#core-dns-terminology)
-4. [DNS Record Types](#dns-record-types)
-5. [Amazon Route 53](#amazon-route-53)
-6. [Hosted Zones](#hosted-zones)
-7. [Alias Records](#alias-records)
-8. [TTL — Time To Live](#ttl--time-to-live)
-9. [Routing Policies](#routing-policies)
-10. [Health Checks](#health-checks)
-11. [Key Differences & Comparisons](#key-differences--comparisons)
-12. [Real-World Architecture](#real-world-architecture)
-13. [Interview Questions](#interview-questions)
-14. [Quick Glossary](#quick-glossary)
+DNS acts like the internet’s phone book, allowing users to access websites using names instead of remembering IP addresses.
 
 ---
 
-## The Big Picture
+## Why DNS is Important
+Without DNS, users would need to remember IP addresses for every website.
 
-Before diving into details, here is the complete flow from a domain purchase to a user hitting your application:
-
-```
-You buy domain on GoDaddy
-         ↓
-Point GoDaddy NS records → Route 53
-         ↓
-Route 53 Hosted Zone holds your DNS records
-         ↓
-User types your domain in browser
-         ↓
-DNS Resolution happens (browser → ISP → root → TLD → Route 53)
-         ↓
-Route 53 applies a Routing Policy
-         ↓
-Returns IP / Alias target
-         ↓
-User's request hits your AWS infrastructure (ALB / CloudFront / EC2)
-```
-
-Every concept in this guide fits somewhere in this chain.
+DNS provides:
+- Easy-to-remember website names
+- Stable access even if server IPs change
+- Scalability for millions of websites
 
 ---
 
-## How DNS Actually Works
+## DNS Hierarchy
+DNS uses a hierarchical naming structure:
 
-### The Problem DNS Solves
-
-Computers talk to each other using **IP addresses** like `142.250.183.14`. Humans remember names like `google.com`. DNS is the system that bridges this gap — the **phonebook of the internet**.
-
-| Human-Friendly | Computer-Friendly |
-|----------------|-------------------|
-| google.com | 142.250.183.14 |
-| amazon.com | 54.x.x.x |
-| netflix.com | 52.x.x.x |
-
-### The DNS Resolution Journey
-
-When you type `example.com` in your browser, this is exactly what happens — step by step:
-
+```text
+.
+└── .com
+    └── example.com
+        ├── www.example.com
+        └── api.example.com
 ```
-Browser
-  │
-  ├─ 1. Check local cache → (found? done. not found? continue ↓)
-  │
-  ├─ 2. Ask Recursive Resolver (your ISP's DNS or 8.8.8.8)
-  │
-  ├─ 3. Resolver → Root Name Server
-  │         "Who handles .com?"
-  │         Root replies: "Ask the .com TLD server"
-  │
-  ├─ 4. Resolver → .com TLD Name Server
-  │         "Who handles example.com?"
-  │         TLD replies: "Ask ns-2048.awsdns-64.com"
-  │
-  ├─ 5. Resolver → Route 53 (Authoritative Name Server)
-  │         "What is example.com?"
-  │         Route 53 replies: "It's 1.2.3.4"
-  │
-  └─ 6. Browser connects to 1.2.3.4 ✓
-```
-
-This entire process typically takes **milliseconds**. Results are cached per the TTL to avoid repeating it on every request.
-
-### The Key Players
-
-| Component | Role | Example |
-|-----------|------|---------|
-| **Recursive Resolver** | Does all the legwork of finding the answer | Your ISP's DNS or `8.8.8.8` |
-| **Root Name Server** | Knows where all TLD servers are | 13 root server clusters worldwide |
-| **TLD Name Server** | Knows who manages each domain under a TLD | Handles all `.com`, `.org`, `.in` |
-| **Authoritative Name Server** | Has the final, definitive answer | Route 53, Cloudflare |
-
-> 💡 **Key Insight:** Route 53 acts as the **Authoritative Name Server**. It is the last stop in the chain and the one that actually holds your DNS records.
 
 ---
 
-## Core DNS Terminology
+## How DNS Resolution Works 🔄
 
-### Domain Registrar
+![DNS Resolution Flow](./images/how-dns-works.png)
 
-The company you **buy your domain from**. Examples: GoDaddy, Namecheap, Google Domains.
+### DNS Resolution Steps
 
-Buying a domain gives you ownership, but it does **not** automatically control where DNS is managed. You can register with GoDaddy and still point DNS to Route 53.
+When you enter `www.example.com` in a browser:
 
-> Think of the registrar as: *"The company that officially registers ownership of your internet domain."*
+1. **Browser Cache Check**
+   - Browser checks if the domain IP is already cached.
 
-### Name Server (NS)
+2. **OS Cache Check**
+   - Operating system checks its DNS cache.
 
-The server that is authoritative for your domain — it holds and answers DNS queries.
+3. **Query Recursive Resolver**
+   - Device sends the request to a recursive resolver (ISP, Google DNS `8.8.8.8`, Cloudflare `1.1.1.1`).
 
+4. **Root DNS Server**
+   - Resolver asks the Root Server for `.com` information.
+   - Root Server points to the `.com` TLD server.
+
+5. **TLD DNS Server**
+   - Resolver asks the TLD server for `example.com`.
+   - TLD server returns the Authoritative Name Server.
+
+6. **Authoritative Name Server**
+   - Returns the actual IP address of `www.example.com`.
+
+7. **Browser Connects to Server**
+   - Browser receives the IP and loads the website.
+
+8. **Caching**
+   - The result is cached for future requests based on TTL.
+
+---
+
+### Key DNS Components
+
+| Component | Purpose |
+|---|---|
+| **Recursive Resolver** | Performs DNS lookup for the client |
+| **Root Server** | Directs requests to TLD servers |
+| **TLD Server** | Handles domains like `.com`, `.org` |
+| **Authoritative Server** | Stores actual DNS records |
+| **DNS Cache** | Speeds up future lookups |
+
+---
+
+### Important DNS Terms
+
+| Term | Description |
+|---|---|
+| **Domain Name** | Human-readable website name |
+| **IP Address** | Numerical server address |
+| **TTL** | Cache duration of DNS records |
+| **FQDN** | Fully Qualified Domain Name - Complete domain name (`www.example.com.`) |
+| **TLD** | Top-Level Domain like `.com` |
+
+---
+
+## DNS Service Providers 🌐
+
+### Popular DNS Providers
+
+| Provider | Type | Features |
+|---|---|---|
+| **GoDaddy** | Registrar + DNS Hosting | Beginner-friendly, popular domain provider |
+| **Namecheap** | Registrar + DNS Hosting | Affordable pricing, free Whois privacy |
+| **Cloudflare** | DNS Hosting + CDN | Fast DNS, DDoS protection, free tier |
+| **AWS Route 53** | Registrar + DNS Hosting | AWS integration, advanced routing |
+
+---
+
+### Domain Registrar vs DNS Hosting
+
+#### Domain Registrar
+- Lets you purchase and own a domain name
+- Maintains domain ownership records
+
+Examples:
+- GoDaddy
+- Namecheap
+- Route 53
+
+#### DNS Hosting Provider
+- Hosts DNS records for your domain
+- Responds to DNS queries
+
+Examples:
+- Cloudflare
+- Route 53
+
+---
+
+### Simple Analogy
+- **Domain Registrar** → Registers your house address
+- **DNS Hosting Provider** → Delivers mail to your house
+
+You can buy a domain from **GoDaddy** and use **Route 53** or **Cloudflare** for DNS hosting.
+
+---
+
+## AWS Route 53 🌐
+
+![Route 53](./images/route53.png)
+
+### What is Route 53?
+Amazon Route 53 is a **highly available, scalable, fully managed, and authoritative DNS service** provided by AWS.
+
+> **Authoritative DNS** means you can directly manage and update DNS records for your domain.
+
+Route 53 also acts as:
+- A **Domain Registrar**
+- A **DNS Routing Service**
+- A **Health Checking Service**
+
+---
+
+### Main Features
+
+| Feature | Description |
+|---|---|
+| **Domain Registration** | Purchase and manage domains through AWS |
+| **DNS Routing** | Routes traffic to resources like EC2, S3, ALB, CloudFront |
+| **Health Checks** | Monitors application endpoints and routes traffic only to healthy resources |
+| **High Availability** | AWS provides a **100% availability SLA** |
+
+---
+
+### Why is it Called Route 53?
+The name has two meanings:
+
+- **Route** → Routes internet/DNS traffic to the correct destination
+- **53** → DNS uses **port 53** for queries and responses
+
+Example:
+- HTTP → Port 80
+- HTTPS → Port 443
+- DNS → Port 53
+
+AWS named the service after the standard DNS port.
+
+---
+
+## Route 53 Core Components
+
+### Hosted Zones 📂
+
+A **Hosted Zone** is a container for DNS records of a domain.
+
+Example:
+- `example.com`
+- `api.example.com`
+
+Route 53 automatically creates:
+- **NS Record** → Route 53 name servers
+- **SOA Record** → Administrative metadata
+
+![Hosted Zones](./images/hosted-zones.png)
+
+---
+
+### Public Hosted Zone 🌍
+
+Used for routing traffic from the **public internet**.
+
+---
+
+### Private Hosted Zone 🔒
+
+Used for routing traffic **inside VPCs only**.
+
+> Public zones work on the internet.  
+> Private zones work only inside AWS VPCs.
+
+---
+
+### Name Servers (NS) 🌐
+
+Name Servers host DNS records and answer DNS queries.
+
+Example Route 53 NS records:
+
+```text
+ns-123.awsdns-45.com
+ns-678.awsdns-12.net
+ns-901.awsdns-34.org
+ns-234.awsdns-56.co.uk
 ```
-ns-2048.awsdns-64.com   ← Route 53 name server
-ns-512.awsdns-12.net    ← Route 53 name server
+
+AWS provides **4 name servers** for redundancy.
+
+---
+
+### DNS Delegation 🔀
+
+To use Route 53 DNS:
+
+1. Buy domain from registrar (GoDaddy, Namecheap)
+2. Create Hosted Zone in Route 53
+3. Copy Route 53 NS records
+4. Update nameservers at registrar
+
+```text
+GoDaddy Domain
+      │
+      ▼
+Update Nameservers
+      │
+      ▼
+Route 53 Name Servers
 ```
 
-When you update your registrar (e.g., GoDaddy) to use Route 53's name servers, you hand over DNS authority to Route 53.
+Now DNS queries are handled by Route 53.
 
-### Hosted Zone
+---
 
-Route 53's **container for DNS records**. Think of it as the DNS database for a domain.
+### SOA Record 🧾
 
-```
-Hosted Zone: example.com
-│
-├── A record       example.com → 1.2.3.4
-├── CNAME          www → example.com
-├── MX             example.com → mail server
-└── TXT            example.com → "v=spf1 ..."
-```
+SOA = **Start of Authority**
+
+Contains administrative details about the hosted zone, such as the **Primary Name Server**, **Administrator Contact**, **Serial Number** (zone version), **Refresh** and **Retry** intervals for DNS synchronization, **Expire** duration, and the default **TTL (Time To Live)** used for DNS caching.
+
+> Usually managed automatically by Route 53.
+
+---
+
+### TTL (Time To Live) ⏳
+
+TTL defines how long DNS records stay cached.
+
+| TTL Type | Effect |
+|---|---|
+| High TTL | Less DNS traffic, slower updates |
+| Low TTL | Faster updates, more DNS queries |
+
+Examples:
+- `60 sec` → Fast updates
+- `24 hr` → Better caching
+
+> Alias records do not allow manual TTL configuration.
 
 ---
 
 ## DNS Record Types
 
-DNS records are the mappings inside a hosted zone. Each type serves a specific purpose.
+```text
+A Record       → Domain → IPv4 Address
+AAAA Record    → Domain → IPv6 Address
+CNAME          → Domain → Another Domain
+MX Record      → Domain → Mail Server
+TXT Record     → Text Metadata / Verification
+NS Record      → Authoritative Name Servers
+PTR Record     → IP Address → Domain
+SRV Record     → Service Host + Port
+Alias Record   → Domain → AWS Resource
+```
+
+### A Record
+
+Maps domain → IPv4 address.
+
+```text
+example.com → 54.12.34.56
+```
 
 ---
 
-### `A` Record — IPv4 Address
+### AAAA Record
 
-Maps a domain name directly to an **IPv4 address**.
+Maps domain → IPv6 address.
 
+```text
+example.com → 2001:db8::1
 ```
-example.com  →  192.168.1.1
-```
-
-Used for: Any domain that needs to resolve to a server's IP.
 
 ---
 
-### `AAAA` Record — IPv6 Address
+### CNAME Record
 
-Maps a domain name to an **IPv6 address**.
+Maps one domain → another domain.
 
+```text
+www.example.com → example.com
 ```
-example.com  →  2001:0db8:85a3::8a2e:0370:7334
-```
 
-Used for: Modern IPv6-enabled infrastructure.
+| Feature | Details |
+|---|---|
+| **Limitation** | Cannot be used for the root domain (`example.com`) |
+| **Common Use** | Creating subdomain aliases like `www.example.com`, `blog.example.com` |
 
 ---
 
-### `CNAME` Record — Canonical Name (Alias to another domain)
+### MX Record 📧
 
-Maps one domain name to **another domain name**.
+Defines mail servers for a domain.
 
-```
-api.example.com  →  my-load-balancer.amazonaws.com
-www.example.com  →  example.com
-```
-
-**Important limitations:**
-- Cannot point to an IP address (use A record for that)
-- **Cannot be used at the root domain** (`example.com`) — only subdomains
-
-```
-✅ www.example.com   → CNAME → something.amazonaws.com
-❌ example.com       → CNAME → something.amazonaws.com  (invalid)
+```text
+example.com → Priority 1 → aspmx.l.google.com
 ```
 
-> This root-domain limitation is exactly why Route 53 introduced the **Alias record**.
+> When someone sends an email to `user@example.com`, the MX record tells the internet which mail server should receive that email.
 
 ---
 
-### `MX` Record — Mail Exchange
+### TXT Record
 
-Defines the **mail servers** responsible for receiving email for a domain. Includes a priority value.
-
-```
-example.com  →  10  mail.google.com
-example.com  →  20  mail-backup.google.com
-```
-
-Lower priority number = higher preference.
-
-Used for: Gmail, Microsoft 365, or any custom email setup.
-
----
-
-### `TXT` Record — Text
-
-Stores **arbitrary text data** associated with a domain. Primarily used for verification and email security.
+Stores text-based information for a domain.
 
 Common uses:
+- **Domain Verification** → Proves domain ownership to services like Google or Microsoft
+- **SPF** → Specifies which mail servers are allowed to send emails for your domain
+- **DKIM** → Helps verify that emails were not tampered with
 
-| Purpose | Example Value |
-|---------|---------------|
-| Domain verification | `google-site-verification=abc123` |
-| SPF (email sender policy) | `v=spf1 include:_spf.google.com ~all` |
-| DKIM (email signing key) | `v=DKIM1; k=rsa; p=MIGf...` |
-| DMARC (email policy) | `v=DMARC1; p=reject; rua=mailto:dmarc@...` |
+> This SPF record allows Google mail servers to send emails on behalf of the domain.
+---
+
+### NS Record
+
+Defines authoritative name servers. Automatically created in Route 53.
 
 ---
 
-### `NS` Record — Name Server
+### PTR Record 🔁
 
-Declares which **name servers are authoritative** for the domain. These are the records you update in GoDaddy when pointing to Route 53.
+Used for **reverse DNS lookup**, allowing systems to map an IP address back to its associated domain name. Commonly used in email verification, logging, and network troubleshooting.
 
-```
-example.com  NS  ns-2048.awsdns-64.com
-example.com  NS  ns-512.awsdns-12.net
+Example:
+
+```text
+54.12.34.56 → example.com
 ```
 
 ---
 
-### `SOA` Record — Start of Authority
+### SRV Record
 
-**Auto-created** by Route 53 for every hosted zone. Contains metadata about the DNS zone itself.
+Used to define the **hostname and port number** for specific services, helping clients discover where a service is running.
 
-Includes:
-- Primary name server
-- DNS admin email
-- Serial number (version)
-- Refresh and retry timing
-
-You rarely need to modify this manually.
-
+Commonly used in:
+- VoIP
+- SIP
+- XMPP
+- Gaming services
 ---
 
-### Record Types — Quick Reference
+## Alias Records ⭐
 
-| Record | Maps | Example |
-|--------|------|---------|
-| `A` | Domain → IPv4 | `example.com → 1.2.3.4` |
-| `AAAA` | Domain → IPv6 | `example.com → 2001:db8::1` |
-| `CNAME` | Domain → Domain | `www → example.com` |
-| `MX` | Domain → Mail server | `example.com → mail.google.com` |
-| `TXT` | Domain → Text string | SPF, DKIM, verification |
-| `NS` | Domain → Name servers | Points to Route 53 servers |
-| `SOA` | Zone metadata | Auto-created, rarely edited |
-| `Alias` *(Route 53 only)* | Root domain → AWS resource | `example.com → ALB` |
+Alias records map domains directly to AWS resources such as:
+- Load Balancers
+- CloudFront
+- API Gateway
+- S3 Static Websites
+- Global Accelerator
+
+**Features:**
+- Works at root domain (`example.com`)
+- Automatically tracks AWS IP changes
+- No extra DNS query
+- Free for AWS targets
+- Native health check support
+
+Example:
+
+```text
+example.com → ALB.amazonaws.com
+```
 
 ---
-
-## Amazon Route 53
-
-### What is Route 53?
-
-Amazon Route 53 is AWS's fully managed **DNS service**. The name comes from **port 53** — the standard port for DNS.
-
-It goes beyond basic DNS and provides:
-
-- **DNS management** — host and manage DNS records
-- **Domain registration** — buy domains directly in AWS
-- **Health checks** — monitor endpoint availability
-- **Traffic routing** — 8 different routing policies
-- **Failover** — automatic disaster recovery via DNS
-- **Latency optimization** — route users to the fastest region
-
-### How GoDaddy + Route 53 Work Together
-
-The most common real-world setup: **GoDaddy registers the domain, Route 53 manages DNS.**
-
-```
-Step 1: Buy domain on GoDaddy  →  example.com
-         ↓
-Step 2: Create Hosted Zone in Route 53
-         ↓
-Step 3: Route 53 provides 4 NS records
-        ns-2048.awsdns-64.com
-        ns-512.awsdns-12.net
-        ns-1024.awsdns-00.org
-        ns-768.awsdns-32.co.uk
-         ↓
-Step 4: Paste those NS records into GoDaddy's NS settings
-         ↓
-Step 5: Route 53 is now authoritative DNS for example.com ✓
-```
-
-This separation lets you use Route 53's advanced routing while keeping your domain registered anywhere you prefer.
-
----
-
-## Hosted Zones
-
-A **Hosted Zone** is the DNS container in Route 53. It holds all the DNS records for a domain.
-
-### Public Hosted Zone
-
-Accessible from the **open internet**. Anyone in the world can resolve these records.
-
-```
-example.com        →  Public
-api.example.com    →  Public
-cdn.example.com    →  Public
-```
-
-Used for: Websites, public APIs, public-facing services.
-
-### Private Hosted Zone
-
-Accessible **only from within a specified VPC**. External requests cannot resolve these names.
-
-```
-db.internal.local          →  Only resolvable inside VPC
-payment.service.internal   →  Only resolvable inside VPC
-auth.microservice.local    →  Only resolvable inside VPC
-```
-
-Used for: Internal microservices, databases, private APIs.
-
-### Comparison
-
-| Feature | Public Zone | Private Zone |
-|---------|-------------|--------------|
-| Internet accessible | ✅ Yes | ❌ No |
-| Attached to VPC | ❌ No | ✅ Yes |
-| Use case | Websites, public APIs | Internal services |
-| Typical TLD | `.com`, `.io`, `.in` | `.local`, `.internal` |
-
----
-
-## Alias Records
-
-### The Problem Alias Solves
-
-Standard DNS has two problems with AWS resources:
-
-**Problem 1:** CNAME cannot be used at the root domain.
-```
-❌ example.com → CNAME → my-alb.amazonaws.com   (invalid)
-```
-
-**Problem 2:** AWS services (ALB, CloudFront) don't have **static IPs** — they change. You can't hardcode them in an A record.
-
-```
-❌ example.com → A → 54.x.x.x   (IP will change tomorrow)
-```
-
-### The Solution: Alias Record
-
-Route 53's **Alias record** is an AWS extension to standard DNS. It solves both problems.
-
-```
-✅ example.com  →  ALIAS  →  my-alb.amazonaws.com
-✅ example.com  →  ALIAS  →  d1234.cloudfront.net
-✅ example.com  →  ALIAS  →  mybucket.s3-website.amazonaws.com
-✅ example.com  →  ALIAS  →  another-r53-record.example.com
-```
-
-Route 53 automatically resolves the Alias target and returns the correct IPs — and it updates automatically when AWS changes them.
-
-### Alias vs CNAME vs A Record
-
-| Feature | A Record | CNAME | Alias |
-|---------|----------|-------|-------|
-| Works at root domain | ✅ (needs static IP) | ❌ | ✅ |
-| Points to domain name | ❌ | ✅ | ✅ |
-| Tracks IP changes automatically | ❌ | ❌ | ✅ |
-| Works with AWS services | ❌ | Partially | ✅ |
-| Route 53 query charges | Yes | Yes | **Free** (for AWS targets) |
-
----
-
-## TTL — Time To Live
-
-TTL defines **how long** (in seconds) a DNS resolver should cache a record before re-querying.
-
-```
-TTL = 60      →  Cache for 1 minute
-TTL = 300     →  Cache for 5 minutes
-TTL = 86400   →  Cache for 24 hours
-```
-
-### Low TTL vs High TTL
-
-| | Low TTL (e.g., 60s) | High TTL (e.g., 86400s) |
-|---|---|---|
-| Propagation speed | ⚡ Fast | 🐢 Slow |
-| DNS query volume | High | Low |
-| Good for | Failover, migrations | Stable production records |
-| Flexibility | High | Low |
-
-> 🔑 **Migration tip:** Before making any DNS change, lower your TTL to `60` seconds and wait for the old TTL to expire. Then make your change. Traffic will shift much faster. Raise TTL back after the migration is stable.
-
----
-
-## Routing Policies
-
-Routing policies control **how Route 53 responds to DNS queries**. This is where Route 53 goes far beyond basic DNS.
-
----
-
-### 1. Simple Routing
-
-The **default**. One record maps to one resource. No logic, no conditions.
-
-```
-example.com  →  ALB
-```
-
-**Use when:** You have a single server or a single endpoint.
-
----
-
-### 2. Weighted Routing
-
-Distributes traffic across **multiple endpoints by percentage**.
-
-```
-example.com  →  Server A (weight: 80)  →  gets 80% of traffic
-example.com  →  Server B (weight: 20)  →  gets 20% of traffic
-```
-
-Setting a weight to `0` removes a target from rotation without deleting it.
-
-**Use for:**
-- Canary deployments (send 5% to new version, 95% to old)
-- A/B testing
-- Gradual traffic migration between regions
-
----
-
-### 3. Latency-Based Routing
-
-Routes each user to the **AWS region with the lowest network latency** for them. Route 53 measures latency between the user's region and your configured regions.
-
-| User Location | Routed To |
-|---------------|-----------|
-| India | ap-south-1 (Mumbai) |
-| Europe | eu-central-1 (Frankfurt) |
-| US East | us-east-1 (Virginia) |
-
-**Use for:** Global applications where performance is critical.
-
-> Note: This routes by **latency**, not by geography. A user in India might get routed to Singapore if latency there is lower.
-
----
-
-### 4. Failover Routing
-
-**Primary + secondary** setup. Route 53 uses health checks to determine when to failover.
-
-| Role | Endpoint | Status |
-|------|----------|--------|
-| Primary | Main ALB — us-east-1 | Healthy → serves traffic |
-| Secondary | DR ALB — us-west-2 | Standby → activates on failure |
-
-When the primary fails its health check, Route 53 automatically starts returning the secondary's address.
-
-**Use for:** Disaster recovery, high availability, business continuity.
-
----
-
-### 5. Geolocation Routing
-
-Routes based on the **country or continent** of the user. You define rules per location.
-
-| User's Country | Destination |
-|----------------|-------------|
-| India | in.example.com |
-| United States | us.example.com |
-| Germany | eu.example.com |
-| (Default) | global.example.com |
-
-Always configure a **Default** record — it catches users from locations not explicitly mapped.
-
-**Use for:** Legal compliance (GDPR), localization, language-specific content delivery.
-
----
-
-### 6. Geoproximity Routing
-
-Routes based on **physical distance** between the user and your resources. You can also apply a **bias** — a positive bias expands a region's coverage, a negative bias shrinks it.
-
-```
-Bias = +50 on Mumbai  →  Mumbai attracts more users (even from farther away)
-Bias = -25 on Tokyo   →  Tokyo serves a smaller geographic area
-```
-
-Requires **Route 53 Traffic Flow** (the visual policy editor in the console).
-
-**Use for:** Fine-grained geographic traffic shaping across many global regions.
-
-> 🔑 **Geolocation vs Geoproximity:**
-> - Geolocation: rule-based by **country/continent**
-> - Geoproximity: distance-based with **adjustable bias**
-
----
-
-### 7. Multi-Value Answer Routing
-
-Returns **up to 8 healthy IP addresses** in response to a DNS query. The client picks one (usually at random). Unlike Simple routing, this integrates with health checks — unhealthy endpoints are excluded.
-
-```
-DNS response:
-  1.1.1.1  ✓ healthy  →  included
-  1.1.1.2  ✓ healthy  →  included
-  1.1.1.3  ✗ unhealthy → excluded
-```
-
-**Use for:** Basic client-side load balancing without setting up an ELB.
-
-> Note: This is **not** a true load balancer replacement — it's DNS-level distribution only.
-
----
-
-### 8. IP-Based Routing
-
-Routes based on the **source IP range (CIDR block)** of the client. You define CIDR-to-endpoint mappings.
-
-| Client IP Range | Destination |
-|-----------------|-------------|
-| `10.0.0.0/8` (corporate network) | Internal app |
-| `203.0.113.0/24` (ISP A) | ISP-optimized endpoint |
-| All other IPs | Public app |
-
-**Use for:** Enterprise traffic management, ISP-specific routing, on-prem to cloud setups.
-
----
-
-### Routing Policies — Quick Reference
-
-| Policy | Routes Based On | Best For |
-|--------|-----------------|----------|
-| **Simple** | Single record | One app, one server |
-| **Weighted** | Traffic % split | Canary releases, A/B testing |
-| **Latency** | Lowest latency to region | Global apps, performance |
-| **Failover** | Health check status | Disaster recovery, HA |
-| **Geolocation** | Country / continent | Compliance, localization |
-| **Geoproximity** | Physical distance + bias | Advanced geo traffic shaping |
-| **Multi-Value** | Multiple healthy IPs | Simple HA without ELB |
-| **IP-Based** | Client IP / CIDR | Enterprise, ISP routing |
-
----
-
-## Health Checks
-
-Route 53 can **actively monitor your endpoints** and automatically remove unhealthy ones from DNS responses.
-
-### Types of Health Checks
-
-**1. Endpoint Health Check**
-Monitors a URL, IP address, or domain on a schedule.
-```
-Monitor: https://example.com/health
-Interval: every 30 seconds
-Threshold: fail after 3 consecutive failures
-```
-
-**2. Calculated Health Check**
-Combines the results of **multiple health checks** using AND / OR / NOT logic.
-```
-Healthy only if: check-A AND check-B AND check-C all pass
-```
-
-**3. CloudWatch Alarm Health Check**
-Triggers based on a **CloudWatch metric or alarm** (e.g., CPU > 90%, error rate > 5%).
-
-### Integration with Routing Policies
-
-Health checks are used by:
-- **Failover Routing** — triggers the switch to secondary
-- **Multi-Value Routing** — excludes unhealthy IPs from the response
-- **Weighted / Latency / Geolocation** — can be combined with health checks to skip unhealthy targets
-
----
-
-## Key Differences & Comparisons
 
 ### CNAME vs Alias
 
-| | CNAME | Alias |
+| Feature | CNAME | Alias |
 |---|---|---|
-| Works at root domain | ❌ No | ✅ Yes |
-| Points to | Any domain | AWS resources only |
-| Tracks IP changes | ❌ No | ✅ Automatically |
-| Route 53 query charge | Yes | Free (for AWS targets) |
-| Standard DNS? | Yes | AWS-specific extension |
+| Root Domain Support | ❌ No | ✅ Yes |
+| AWS Native Integration | Partial | ✅ Native |
+| Extra DNS Lookup | Yes | No |
+| Automatic AWS IP Updates | ❌ No | ✅ Yes |
+| Cost for AWS Targets | Standard | Free |
+
+> Alias records are a Route 53 extension and automatically track AWS IP changes.
 
 ---
 
-### Geolocation vs Geoproximity
+## Route 53 Routing Policies 🌐
 
-| | Geolocation | Geoproximity |
-|---|---|---|
-| Routes by | Country / continent | Physical distance |
-| Logic type | Rule-based | Distance-based |
-| Bias support | ❌ No | ✅ Yes |
-| Complexity | Simpler | More advanced |
-| Requires Traffic Flow | ❌ No | ✅ Yes |
+> Routing Policies define how Route 53 responds to DNS queries.  
+> DNS itself does **not route traffic** like a Load Balancer — it only decides which IP or resource to return.
 
 ---
 
-### Public vs Private Hosted Zone
+### Routing Policies Overview
 
-| | Public Zone | Private Zone |
-|---|---|---|
-| Resolvable from | Internet | Inside VPC only |
-| Use case | Websites, APIs | Internal microservices |
-| Typical domain | `.com`, `.io` | `.local`, `.internal` |
-| VPC attachment required | ❌ No | ✅ Yes |
-
----
-
-### Low TTL vs High TTL
-
-| | Low TTL | High TTL |
-|---|---|---|
-| Value | 60s | 86400s |
-| Propagation speed | Fast | Slow |
-| Query load | High | Low |
-| Best for | Migrations, failover | Stable records |
+| Policy | Routes Based On | Health Checks | Common Use |
+|---|---|---|---|
+| **Simple** | Single resource | ❌ Limited | Basic websites |
+| **Weighted** | Assigned weights | ✅ Yes | A/B testing, gradual rollout |
+| **Latency** | Lowest network latency | ✅ Yes | Global low-latency apps |
+| **Failover** | Primary / Secondary | ✅ Required | Disaster recovery |
+| **Geolocation** | User location | ✅ Yes | Localization & compliance |
+| **Geoproximity** | Geography + bias | ✅ Yes | Fine-grained traffic shaping |
+| **Multi-Value** | Multiple healthy IPs | ✅ Yes | Basic load distribution |
+| **IP-Based** | Client IP/CIDR | ✅ Yes | ISP/network-based routing |
 
 ---
 
-## Real-World Architecture
+## Simple Routing
 
-### Full AWS Setup
+Returns a single resource for a domain.
 
-```
-GoDaddy (Domain registrar)
-    │
-    │  NS records updated to Route 53
-    ▼
-Route 53 Name Servers
-    │
-    │  Authoritative for example.com
-    ▼
-Public Hosted Zone: example.com
-    │
-    ├── Alias A Record (root domain)
-    │       │
-    │       │  Latency Routing Policy
-    │       ▼
-    │   ┌─────────────────────────────┐
-    │   │                             │
-    │   ALB — ap-south-1 (Mumbai)    ALB — us-east-1 (Virginia)
-    │   │                             │
-    │   ECS Tasks                    ECS Tasks
-    │
-    ├── CNAME: www.example.com → example.com
-    ├── MX: example.com → Google Workspace
-    ├── TXT: example.com → SPF, DKIM, DMARC records
-    │
-    └── Private Hosted Zone: internal.local
-            │
-            ├── A: db.internal.local → 10.0.1.5 (RDS)
-            └── A: cache.internal.local → 10.0.1.10 (ElastiCache)
+```text
+example.com → 54.12.34.56
 ```
 
----
+Features:
+- Simplest routing policy
+- Can return multiple IPs
+- Browser chooses one randomly
+- No proper health-check failover
+- Best for small/simple applications
 
-## Interview Questions
-
-**Q: Why use Route 53 instead of the registrar's built-in DNS?**
-
-Route 53 offers advanced routing policies (latency, failover, geolocation), health checks, tight AWS integration, and high availability across a global anycast network. Registrar DNS is basic — it typically only supports simple A/CNAME records with no health checks or intelligent routing.
-
----
-
-**Q: Why use Alias instead of CNAME?**
-
-Alias works at the root domain (`example.com`) where CNAME is forbidden by DNS standards. It also automatically tracks IP changes in AWS resources (ALB, CloudFront, etc.) and is free for queries to AWS targets — CNAME is charged per query.
+Use Case:
+- Personal blog hosted on one EC2 instance
 
 ---
 
-**Q: What is the difference between Geolocation and Geoproximity routing?**
+## Weighted Routing ⚖️
 
-Geolocation routes by **country or continent** using explicit rules — traffic from India goes to the Indian server regardless of distance. Geoproximity routes by **physical distance** and lets you apply a bias to shift traffic boundaries. Geoproximity requires Route 53 Traffic Flow and is more flexible but more complex.
+Splits traffic between resources using assigned weights.
 
----
+```text
+Server A → Weight 80
+Server B → Weight 20
+```
 
-**Q: Why lower TTL before a migration?**
+Result:
+- 80% traffic → Server A
+- 20% traffic → Server B
 
-Because resolvers cache DNS answers for the duration of the TTL. If TTL is 86400s (24 hours) and you change your A record, old traffic keeps hitting the old server for up to 24 hours. Lowering TTL to 60s first means the transition takes ~1 minute after the change.
+Features:
+- Gradual deployments
+- A/B testing
+- Blue-Green deployments
+- Weight range: `0–255`
+- Weight `0` stops traffic to a resource
+- If all weights are `0`, traffic is distributed equally
 
----
-
-**Q: What is the difference between Failover and Multi-Value routing?**
-
-Failover is a strict primary/secondary setup — all traffic goes to primary, and only switches to secondary when the primary's health check fails. Multi-Value returns up to 8 healthy IPs and lets the client choose — it's more like simple load balancing. Failover is for DR; Multi-Value is for basic HA.
-
----
-
-## Quick Glossary
-
-| Term | Definition |
-|------|------------|
-| **DNS** | Domain Name System — translates domain names to IP addresses |
-| **Registrar** | Company where you buy/register a domain (GoDaddy, Namecheap) |
-| **Recursive Resolver** | DNS server that does the lookup work on behalf of clients |
-| **Root Name Server** | Top of the DNS hierarchy, knows where all TLD servers are |
-| **TLD** | Top-Level Domain — `.com`, `.org`, `.in`, `.io` |
-| **Authoritative NS** | The final DNS server with the definitive answer for a domain |
-| **Name Server** | Server that holds and answers DNS queries for a domain |
-| **Hosted Zone** | Container for DNS records in Route 53 |
-| **A Record** | Maps domain → IPv4 address |
-| **AAAA Record** | Maps domain → IPv6 address |
-| **CNAME** | Maps domain → another domain (not allowed at root) |
-| **MX Record** | Defines mail servers for a domain |
-| **TXT Record** | Stores text — used for SPF, DKIM, DMARC, verification |
-| **NS Record** | Declares authoritative name servers for a domain |
-| **SOA Record** | Start of Authority — zone metadata, auto-created |
-| **Alias Record** | AWS-specific record — maps root domain to AWS resources |
-| **TTL** | Time To Live — how long resolvers cache a DNS answer |
-| **Public Hosted Zone** | DNS accessible from the internet |
-| **Private Hosted Zone** | DNS accessible only inside a VPC |
-| **Health Check** | Route 53 monitors an endpoint and marks it healthy/unhealthy |
-| **Traffic Flow** | Route 53's visual editor for complex routing policies |
-| **Geolocation** | Route by user's country/continent |
-| **Geoproximity** | Route by physical distance with optional bias |
-| **Weighted Routing** | Split traffic by percentage across endpoints |
-| **Failover Routing** | Primary + secondary with automatic health-check-based switching |
+Use Case:
+- Testing a new application version with limited users
 
 ---
 
-*💡 **Study tip:** The DNS resolution chain is the foundation — understand it cold. Then every Route 53 feature is just an enhancement on top: hosted zones are the database, routing policies are the query logic, health checks are the safeguard, and alias records are the AWS-native shortcut.*
+### Latency Routing ⚡
+
+Routes users to the AWS region with the **lowest network latency**, not necessarily the geographically closest region.
+
+```text
+India User  → Mumbai Region
+US User     → Virginia Region
+```
+
+Features:
+- Optimizes global application performance
+- Based on latency between users and AWS Regions
+- Can integrate with health checks
+
+Use Case:
+- Global applications requiring fast response times
+
+> Unlike Geolocation Routing, Latency Routing does **not** route purely based on the user's country or location — it routes based on the fastest network path.
+
+> **Germany users may be
+directed to the US(if that’s the
+lowest latency)**
+
+---
+
+## Geolocation Routing 📍
+
+Routes traffic based on the user's geographic location.
+
+Supported levels:
+- Continent
+- Country
+- US State
+
+Example:
+
+```text
+Germany Users → German Server
+India Users   → India Server
+Default       → Global Server
+```
+
+Features:
+- Supports localization
+- Useful for legal/compliance requirements
+- Default record recommended
+
+Use Case:
+- Region-specific pricing, language, or media restrictions
+
+---
+
+## Geoproximity Routing 🗺️
+
+Routes traffic based on:
+- User location
+- Resource location
+- Configurable bias
+
+Bias:
+- `+1 to +99` → Expands traffic region
+- `-1 to -99` → Shrinks traffic region
+
+Example:
+
+```text
+US-East Bias +50 → Receives more traffic
+```
+
+Features:
+- Fine-grained traffic control
+- Requires **Route 53 Traffic Flow**
+
+Use Case:
+- Intentionally directing more users to a preferred region
+
+---
+
+## Multi-Value Routing 🔀
+
+Returns multiple healthy IP addresses for a single DNS query.
+
+```text
+Healthy:
+54.12.34.56
+54.12.34.99
+
+Unhealthy:
+54.12.34.11 ❌
+```
+
+Features:
+- Returns up to 8 healthy records
+- Supports health checks
+- Basic load distribution
+- Not a replacement for ELB
+
+Use Case:
+- Multiple EC2 instances serving the same application
+
+---
+
+## IP-Based Routing 🌍
+
+Routes traffic based on the client’s IP address or CIDR range.
+
+Example:
+
+```text
+203.0.113.0/24 → Server A
+198.51.100.0/24 → Server B
+```
+
+Features:
+- ISP/network-specific routing
+- CIDR-based mapping
+- Optimizes enterprise/network traffic
+
+Use Case:
+- Directing branch offices or ISP users to optimized endpoints
+
+---
+
+## Failover Routing 🛡️
+
+Routes traffic to a primary resource and switches to backup if the primary becomes unhealthy.
+
+```text
+Primary Server   → Active
+Secondary Server → Standby
+```
+
+Features:
+- Requires health checks
+- Automatic disaster recovery
+- Active-Passive setup
+
+Use Case:
+- High availability applications with backup regions
+
+---
+
+## Route 53 Health Checks ❤️
+
+Route 53 Health Checks continuously monitor application endpoints and automatically stop routing traffic to unhealthy resources.
+
+> Think of Health Checks as an automated monitoring and failover system for your infrastructure.
+
+---
+
+### Types of Health Checks
+
+#### 1. Endpoint Health Check
+Monitors a specific IP address, domain, or URL using **HTTP, HTTPS, or TCP** protocols.
+
+Example:
+
+```text
+https://example.com/health → HTTP 200 OK
+```
+
+---
+
+#### 2. Calculated Health Check
+Combines multiple health checks into a single logical result using **AND, OR, or NOT** conditions.
+
+Example:
+- Healthy only if **2 out of 3** checks pass
+
+---
+
+#### 3. CloudWatch Alarm Health Check
+Uses a **CloudWatch Alarm** instead of directly checking an endpoint, making it useful for monitoring private VPC resources or custom metrics.
+
+> Route 53 health checkers are public and cannot directly access private VPC endpoints.
+
+---
+
+### Health Check Configuration
+
+| Setting | Example |
+|---|---|
+| **Protocol** | HTTPS |
+| **Port** | 443 |
+| **Path** | `/health` |
+| **Check Interval** | `30 sec` |
+| **Failure Threshold** | `3 failed checks` |
+
+---
+
+### Key Behavior
+
+- Around **15 global AWS health checkers** monitor endpoints continuously
+- Only `2xx` and `3xx` HTTP responses are considered healthy
+- Supports response text matching and CloudWatch integration
+
+---
+
+### Health Check + Failover 🔄
+
+```text
+Primary Healthy   → Traffic goes to Primary
+Primary Unhealthy → Route 53 redirects to Backup
+```
+
+Use Cases:
+- High availability
+- Disaster recovery
+- Automatic failover
+
+---
+
+# TASKS 👨‍💻
+
+## Task 1 — Host a Website Using Simple Routing
+
+### Objective
+- Launch an EC2 instance
+- Install a web server
+- Configure a custom domain
+- Point the domain to EC2 using Route 53
+- Access the website publicly
+
+---
+
+## Architecture
+
+```text
+Internet User
+     │
+     ▼
+www.yourdomain.com
+     │
+     ▼
+Route 53 Hosted Zone
+     │
+     ▼
+EC2 Instance (Apache/Nginx)
+IP: 54.12.34.56
+```
+
+---
+
+## Step 1 — Purchase a Domain
+
+### GoDaddy / Namecheap
+1. Purchase a domain
+2. Route 53 will manage DNS later
+
+### Route 53
+1. Open AWS Console → Route 53
+2. Register Domain
+3. Hosted zone is created automatically
+
+---
+
+## Step 2 — Launch EC2 Instance
+
+### EC2 Configuration
+
+| Setting | Value |
+|---|---|
+| AMI | Amazon Linux 2023 |
+| Instance Type | t2.micro |
+| Public IP | Enabled |
+| Security Group | Allow SSH (22) & HTTP (80) |
+
+### Launch
+1. Open EC2 → Launch Instance
+2. Create or select key pair
+3. Launch instance
+4. Note Public IP
+
+Example:
+```text
+54.12.34.56
+```
+
+---
+
+## Step 3 — Install Apache2 Web Server (Ubuntu)
+
+### Connect to EC2
+
+```bash
+ssh -i your-key.pem ubuntu@54.12.34.56
+```
+
+### Install Apache2
+
+```bash
+sudo apt update -y
+sudo apt install apache2 -y
+
+sudo systemctl start apache2
+sudo systemctl enable apache2
+```
+
+### Create Sample Webpage
+
+```bash
+sudo bash -c 'cat > /var/www/html/index.html << EOF
+<h1>Hello from AWS Route 53!</h1>
+EOF'
+```
+
+### Verify Website
+
+Open:
+
+```text
+http://54.12.34.56
+```
+---
+
+## Step 4 — Create Route 53 Hosted Zone
+
+1. Open Route 53
+2. Hosted Zones → Create Hosted Zone
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Domain Name | yourdomain.com |
+| Type | Public Hosted Zone |
+
+3. Copy the generated NS records
+
+Example:
+
+```text
+ns-123.awsdns-45.com
+ns-678.awsdns-12.net
+ns-901.awsdns-34.org
+ns-234.awsdns-56.co.uk
+```
+
+---
+
+## Step 5 — Update Nameservers
+
+### GoDaddy
+1. My Products → DNS
+2. Nameservers → Change
+3. Select Custom
+4. Paste Route 53 NS records
+
+### Namecheap
+1. Domain List → Manage
+2. Nameservers → Custom DNS
+3. Paste Route 53 NS records
+
+---
+
+## Step 6 — Create A Record
+
+1. Route 53 → Hosted Zone
+2. Create Record
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Record Type | A |
+| Routing Policy | Simple |
+| Value | EC2 Public IP |
+| TTL | 300 |
+
+Example:
+
+```text
+54.12.34.56
+```
+
+---
+
+## Step 7 — Validate DNS
+
+### Check DNS
+
+```bash
+nslookup yourdomain.com
+dig yourdomain.com
+```
+
+### Open Website
+
+```text
+http://yourdomain.com
+```
+
+---
+
+# Routing Policies
+
+## Weighted Routing
+
+### Purpose
+Split traffic between servers.
+
+### Example
+
+| Server | Weight |
+|---|---|
+| Server 1 | 80 |
+| Server 2 | 20 |
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Routing Policy | Weighted |
+| Weight | 80 / 20 |
+| Record Type | A |
+
+### Test
+
+```bash
+for i in {1..10}; do
+  dig +short yourdomain.com
+done
+```
+
+---
+
+## Latency Routing
+
+### Purpose
+Route users to nearest AWS region.
+
+### Regions
+- ap-south-1 → Mumbai
+- us-east-1 → Virginia
+- eu-west-1 → Ireland
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Routing Policy | Latency |
+| Region | AWS Region |
+| Record Type | A |
+
+---
+
+## Failover Routing
+
+### Purpose
+Disaster recovery using primary and backup servers.
+
+### Create Health Check
+
+| Field | Value |
+|---|---|
+| Protocol | HTTP |
+| Port | 80 |
+| Path | /health |
+
+### Primary Record
+
+| Field | Value |
+|---|---|
+| Failover Type | Primary |
+| Value | Primary Server IP |
+
+### Secondary Record
+
+| Field | Value |
+|---|---|
+| Failover Type | Secondary |
+| Value | Backup Server IP |
+
+### Test Failover
+
+```bash
+sudo systemctl stop httpd
+```
+
+Restart:
+
+```bash
+sudo systemctl start httpd
+```
+
+---
+
+## Geolocation Routing
+
+### Purpose
+Route traffic based on user location.
+
+### Example
+
+| Location | Server |
+|---|---|
+| India | India Server |
+| USA | US Server |
+| Default | Global Server |
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Routing Policy | Geolocation |
+
+---
+
+## Multi-Value Routing
+
+### Purpose
+Return multiple healthy IP addresses.
+
+### Configuration
+
+| Field | Value |
+|---|---|
+| Routing Policy | Multivalue Answer |
+| Health Check | Enabled |
+
+---
+
+# Route 53 Record Types
+
+Explore different Route 53 DNS record types and their use cases.
+
+- **A Record** → Maps domain to IPv4 address
+- **AAAA Record** → Maps domain to IPv6 address
+- **CNAME Record** → Maps one domain to another domain
+- **MX Record** → Configures email routing
+- **TXT Record** → Used for verification and email security
+- **NS Record** → Defines authoritative nameservers
+- **SOA Record** → Stores DNS zone information
+- **PTR Record** → Used for reverse DNS lookup
+- **Alias Record** → Points root domain to AWS resources like ALB or CloudFront
+
+Explore and configure these record types in Route 53 to understand their practical use cases.
+
+---
+
+# Key Takeaways
+
+- Route 53 provides DNS management, routing, and health monitoring
+- Hosted Zones store DNS records
+- Alias Records are preferred for AWS resources
+- Routing Policies help control traffic intelligently
+- Health checks improve availability and failover handling
+
+---
+
+# Explore Routing Policies
+
+- Simple Routing
+- Weighted Routing
+- Latency Routing
+- Failover Routing
+- Geolocation Routing
+- Geoproximity Routing
+- Multi-Value Routing
+- IP-Based Routing
+
+Explore each policy and understand where it is best used in real-world architectures.
