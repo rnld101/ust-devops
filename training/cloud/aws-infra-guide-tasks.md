@@ -4191,6 +4191,8 @@ DNS uses a hierarchical naming structure:
 
 ### How DNS Resolution Works
 
+![How-dns-works](images/how-dns-works.png)
+
 When you enter `www.example.com` in a browser:
 
 1. **Browser Cache Check** — Browser checks if the domain IP is already cached.
@@ -4264,6 +4266,8 @@ When you enter `www.example.com` in a browser:
 
 ### AWS Route 53
 
+![Route53](images/route53.png)
+
 #### What is Route 53?
 
 Amazon Route 53 is a **highly available, scalable, fully managed, and authoritative DNS service** provided by AWS.
@@ -4304,6 +4308,8 @@ AWS named the service after the standard DNS port.
 ### Route 53 Core Components
 
 #### Hosted Zones
+
+![Hosted-zones](images/hosted-zones.png)
 
 A **Hosted Zone** is a container for DNS records of a domain.
 
@@ -4348,6 +4354,8 @@ To use Route 53 DNS:
 2. Create Hosted Zone in Route 53
 3. Copy Route 53 NS records
 4. Update nameservers at registrar
+
+![final-dns-flow](images/final-dns-flow.png)
 
 ```
 GoDaddy Domain
