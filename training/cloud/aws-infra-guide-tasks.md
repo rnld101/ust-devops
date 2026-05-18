@@ -4344,6 +4344,8 @@ ns-901.awsdns-34.org
 ns-234.awsdns-56.co.uk
 ```
 
+![final-dns-flow](images/final-dns-flow.png)
+
 ---
 
 #### DNS Delegation
@@ -4354,8 +4356,6 @@ To use Route 53 DNS:
 2. Create Hosted Zone in Route 53
 3. Copy Route 53 NS records
 4. Update nameservers at registrar
-
-![final-dns-flow](images/final-dns-flow.png)
 
 ```
 GoDaddy Domain
