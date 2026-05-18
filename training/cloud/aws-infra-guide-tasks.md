@@ -549,7 +549,7 @@ Architecture:
 
 #### Full Architecture Diagram
 
-![Production VPC Architecture](images/production-vpc-architecture)
+![Production VPC Architecture](images/production-vpc-architecture.png)
 
 *The diagram above shows the complete three-tier architecture with all networking components, security groups, load balancers, auto scaling groups, and traffic flow.*
 
